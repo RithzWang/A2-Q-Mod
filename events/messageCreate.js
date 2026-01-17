@@ -1,21 +1,21 @@
-const { PermissionsBitField, EmbedBuilder, ContainerBuilder, SectionBuilder, MessageFlags } = require('discord.js');
-const db = require('../utils/db');
+const { PermissionsBitField, ContainerBuilder, SectionBuilder, MessageFlags } = require('discord.js');
+const GuildSettings = require('../schemas/GuildSettings'); // <--- Import Schema
 
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
         if (message.author.bot || !message.guild) return;
 
-        // Load Settings for THIS specific guild
-        const settings = db.getGuild(message.guild.id);
+        // 1. Load Settings (Async)
+        let settings = await GuildSettings.findOne({ guildId: message.guild.id });
+        if (!settings) return; // If setup was never run, do nothing (or use defaults)
 
-        // Ignore Admins
         if (message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
         let violation = null;
         let violationColor = 0x888888;
 
-        // 1. Anti-Invite
+        // Anti-Invite
         if (settings.antiInvite) {
             const inviteRegex = /(discord\.gg\/|discord\.com\/invite\/)/i;
             if (inviteRegex.test(message.content)) {
@@ -24,7 +24,7 @@ module.exports = {
             }
         }
 
-        // 2. Anti-Mention
+        // Anti-Mention
         if (!violation && settings.antiMention) {
             const mentionRegex = /@(everyone|here)/;
             if (mentionRegex.test(message.content) && !message.member.permissions.has(PermissionsBitField.Flags.MentionEveryone)) {
@@ -33,25 +33,22 @@ module.exports = {
             }
         }
 
-        // 3. Bad Words
+        // Bad Words
         if (!violation && settings.antiBadWords) {
             const content = message.content.toLowerCase();
-            const words = settings.badWordsList || [];
-            if (words.some(w => content.includes(w))) {
+            if (settings.badWordsList.some(w => content.includes(w))) {
                 violation = "Profanity";
                 violationColor = 0x5865F2;
             }
         }
 
-        // --- PUNISH ---
+        // Punish
         if (violation) {
             try {
                 if (message.deletable) await message.delete();
-
                 const warning = await message.channel.send(`⛔ ${message.author}, **${violation}** is disabled on this server.`);
                 setTimeout(() => warning.delete().catch(() => {}), 5000);
 
-                // Log if channel is set
                 if (settings.logChannelId) {
                     const logChannel = message.guild.channels.cache.get(settings.logChannelId);
                     if (logChannel) {
