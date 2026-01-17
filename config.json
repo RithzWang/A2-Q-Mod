@@ -1,0 +1,9 @@
+{
+    "logChannelId": "YOUR_LOG_CHANNEL_ID",
+    "badWords": ["badword1", "swearword2", "dontsaythis"],
+    "messages": {
+        "invite": "⛔ **Server invites are not allowed!**",
+        "mention": "⛔ **Do not ping everyone!**",
+        "badword": "⛔ **Watch your language!**"
+    }
+}
