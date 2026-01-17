@@ -24,7 +24,7 @@ const client = new Client({
 });
 
 // --- READY EVENT ---
-client.once('ready', () => {
+client.once('clientReady', () => {
     console.log(`🛡️  AutoMod is active as ${client.user.tag}`);
     console.log(`📝 Logging to channel ID: ${config.logChannelId}`);
 });
