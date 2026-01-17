@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, REST, Routes } = require('discord.js');
 const mongoose = require('mongoose'); // <--- Import Mongoose
+require('./keep_alive.js'); 
 // const config = require('./config.json'); // On Render, use Environment Variables instead!
 
 const client = new Client({
