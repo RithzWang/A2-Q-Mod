@@ -3,6 +3,7 @@ const {
     GatewayIntentBits, 
     PermissionsBitField, 
     Partials,
+    ActivityType, // <--- 1. Added this import
     // V2 Imports
     ContainerBuilder,
     SectionBuilder,
@@ -10,7 +11,7 @@ const {
     MessageFlags
 } = require('discord.js');
 
-const keep_alive = require('./keep_alive.js');
+const keep_alive = require('./keep_alive.js'); // Ensure this file exists
 const config = require('./config.json');
 
 // --- CLIENT SETUP ---
@@ -18,18 +19,19 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // CRITICAL
+        GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers
     ],
     partials: [Partials.Message, Partials.Channel]
 });
 
 // --- READY EVENT ---
-client.once('clientReady', () => {
+// 2. Changed 'clientReady' to 'ready'
+client.once('ready', () => {
     console.log(`🛡️  AutoMod is active as ${client.user.tag}`);
     console.log(`📝 Logging to channel ID: ${config.logChannelId}`);
 
-   client.user.setPresence({
+    client.user.setPresence({
         activities: [{ 
             name: 'customstatus', 
             type: ActivityType.Custom, 
@@ -37,16 +39,13 @@ client.once('clientReady', () => {
         }],
         status: 'dnd'
     });
-})
-
-});
+}); // <--- 3. Removed the extra }); that was here before
 
 // --- AUTOMOD LOGIC ---
 client.on('messageCreate', async (message) => {
-    // 1. Ignore bots and DMs
     if (message.author.bot || !message.guild) return;
 
-    // 2. IGNORE ADMINS/STAFF
+    // IGNORE ADMINS/STAFF
     if (message.member.permissions.has(PermissionsBitField.Flags.Administrator) || 
         message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
         return;
@@ -55,68 +54,54 @@ client.on('messageCreate', async (message) => {
     const content = message.content.toLowerCase();
     let violation = null;
     let userWarning = "";
-    let color = 0x888888; // Default Gray
+    let color = 0x888888; 
 
-    // ============================================
-    // CHECK A: ANTI-MENTION (@everyone / @here)
-    // ============================================
+    // A: ANTI-MENTION
     const mentionRegex = /@(everyone|here)/;
     if (mentionRegex.test(message.content)) {
         if (!message.member.permissions.has(PermissionsBitField.Flags.MentionEveryone)) {
             violation = "Illegal Mention";
             userWarning = config.messages.mention;
-            color = 0xED4245; // 🔴 Red
+            color = 0xED4245; 
         }
     }
 
-    // ============================================
-    // CHECK B: ANTI-INVITE (Discord Links)
-    // ============================================
+    // B: ANTI-INVITE
     const inviteRegex = /(discord\.gg\/|discord\.com\/invite\/)/i;
     if (!violation && inviteRegex.test(message.content)) {
         violation = "Server Invite";
         userWarning = config.messages.invite;
-        color = 0xFEE75C; // 🟠 Orange/Yellow
+        color = 0xFEE75C; 
     }
 
-    // ============================================
-    // CHECK C: BAD WORDS
-    // ============================================
+    // C: BAD WORDS
     if (!violation && config.badWords.length > 0) {
         const foundBadWord = config.badWords.some(word => content.includes(word));
         if (foundBadWord) {
             violation = "Profanity";
             userWarning = config.messages.badword;
-            color = 0x5865F2; // 🔵 Blue
+            color = 0x5865F2; 
         }
     }
 
-    // ============================================
-    // ⛔ EXECUTE PUNISHMENT
-    // ============================================
+    // PUNISHMENT
     if (violation) {
         try {
             const originalContent = message.content;
             const author = message.author;
             const channel = message.channel;
 
-            // 1. Delete the bad message
             if (message.deletable) {
                 await message.delete();
             }
 
-            // 2. Send Temporary Warning to Chat
             const warningMsg = await channel.send(`${author} ${userWarning}`);
             setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
 
-            // 3. Send CONTAINER Log to Staff Channel
             const logChannel = client.channels.cache.get(config.logChannelId);
             if (logChannel) {
-                
-                const container = new ContainerBuilder()
-                    .setAccentColor(color);
+                const container = new ContainerBuilder().setAccentColor(color);
 
-                // Create Section with Info and Avatar
                 const section = new SectionBuilder()
                     .addTextDisplayComponents((text) => 
                         text.setContent(`### 🛡️ AutoMod: ${violation}`)
@@ -139,7 +124,6 @@ client.on('messageCreate', async (message) => {
                     flags: MessageFlags.IsComponentsV2 
                 });
             }
-
         } catch (error) {
             console.error(`Failed to handle violation (${violation}):`, error);
         }
@@ -147,4 +131,6 @@ client.on('messageCreate', async (message) => {
 });
 
 // --- LOGIN ---
+// Make sure your token is actually in process.env.TOKEN
+// If it is in config.json, change this to: client.login(config.token);
 client.login(process.env.TOKEN);
