@@ -1,14 +1,14 @@
 {
-  "name": "A2-Q-Mod",
+  "name": "advanced-automod",
   "version": "1.0.0",
-  "description": "A standalone 24/7 AutoMod bot",
+  "description": "AutoMod with Mongoose",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.19.3"
+    "discord.js": "^14.19.3",
+    "mongoose": "^8.0.0"
   },
   "engines": {
     "node": ">=16.9.0"
