@@ -28,6 +28,17 @@ const client = new Client({
 client.once('clientReady', () => {
     console.log(`🛡️  AutoMod is active as ${client.user.tag}`);
     console.log(`📝 Logging to channel ID: ${config.logChannelId}`);
+
+   client.user.setPresence({
+        activities: [{ 
+            name: 'customstatus', 
+            type: ActivityType.Custom, 
+            state: `⚠️ Be Careful` 
+        }],
+        status: 'dnd'
+    });
+
+}); // Updates every 1 minute
 });
 
 // --- AUTOMOD LOGIC ---
