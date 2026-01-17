@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, REST, Routes } = require('discord.js');
-const config = require('./config.json'); // Your Token
+const mongoose = require('mongoose'); // <--- Import Mongoose
+// const config = require('./config.json'); // On Render, use Environment Variables instead!
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]
@@ -9,7 +10,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Load Commands
+// --- 1. LOAD COMMANDS ---
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 const commands = [];
@@ -21,7 +22,7 @@ for (const file of commandFiles) {
     commands.push(command.data.toJSON());
 }
 
-// Load Events
+// --- 2. LOAD EVENTS ---
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
@@ -35,14 +36,24 @@ for (const file of eventFiles) {
     }
 }
 
-// Deploy Commands
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN || config.token); // Use config.token if no env
+// --- 3. CONNECT TO DATABASE & START ---
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
 client.once('ready', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
+
+    // Connect to MongoDB
+    if (!process.env.MONGO_URI) return console.log('❌ Missing MONGO_URI in Render Environment Variables');
+    
+    await mongoose.connect(process.env.MONGO_URI).then(() => {
+        console.log('✅ Connected to MongoDB');
+    }).catch((err) => {
+        console.log('❌ MongoDB Connection Error:', err);
+    });
+
+    // Deploy Commands
     try {
         console.log('Refreshing slash commands...');
-        // Registers commands globally (might take 1 hour) or to a specific guild (instant)
-        // For testing, just use global:
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
         console.log('Successfully registered commands.');
     } catch (error) {
@@ -50,4 +61,4 @@ client.once('ready', async () => {
     }
 });
 
-client.login(process.env.TOKEN || config.token);
+client.login(process.env.TOKEN);
