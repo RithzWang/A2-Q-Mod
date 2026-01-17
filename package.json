@@ -1,0 +1,16 @@
+{
+  "name": "A2-Q-Mod",
+  "version": "1.0.0",
+  "description": "A standalone 24/7 AutoMod bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.17.0"
+  },
+  "engines": {
+    "node": ">=16.9.0"
+  }
+}
