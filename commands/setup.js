@@ -1,13 +1,11 @@
 const { 
     SlashCommandBuilder, 
-    PermissionsBitField, 
     ActionRowBuilder, 
     StringSelectMenuBuilder, 
     StringSelectMenuOptionBuilder,
     ChannelSelectMenuBuilder,
     ChannelType,
     MessageFlags,
-    // V2 Components
     ContainerBuilder,
     SectionBuilder,
     TextDisplayBuilder,
@@ -15,15 +13,13 @@ const {
     SeparatorSpacingSize
 } = require('discord.js');
 
-const db = require('../utils/db');
+const GuildSettings = require('../schemas/GuildSettings'); // <--- Import Schema
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setup')
         .setDescription('Configure the AutoMod system')
-        .addSubcommand(sub => 
-            sub.setName('dashboard').setDescription('View and edit AutoMod settings')
-        )
+        .addSubcommand(sub => sub.setName('dashboard').setDescription('View and edit AutoMod settings'))
         .addSubcommand(sub => 
             sub.setName('badword').setDescription('Add a word to the blocklist')
             .addStringOption(opt => opt.setName('word').setDescription('Word to block').setRequired(true))
@@ -31,16 +27,21 @@ module.exports = {
 
     async execute(interaction) {
         const guildId = interaction.guild.id;
-        const settings = db.getGuild(guildId);
+        
+        // 1. Fetch or Create Settings (Async)
+        let settings = await GuildSettings.findOne({ guildId });
+        if (!settings) {
+            settings = await GuildSettings.create({ guildId });
+        }
+
         const subcommand = interaction.options.getSubcommand();
 
         // --- SUBCOMMAND: ADD BAD WORD ---
         if (subcommand === 'badword') {
             const word = interaction.options.getString('word').toLowerCase();
-            const currentList = settings.badWordsList || [];
-            if (!currentList.includes(word)) {
-                currentList.push(word);
-                db.updateGuild(guildId, 'badWordsList', currentList);
+            if (!settings.badWordsList.includes(word)) {
+                settings.badWordsList.push(word);
+                await settings.save(); // <--- Must Save
                 return interaction.reply({ content: `✅ Added **${word}** to the blocklist.`, flags: MessageFlags.Ephemeral });
             }
             return interaction.reply({ content: `⚠️ **${word}** is already blocked.`, flags: MessageFlags.Ephemeral });
@@ -58,22 +59,17 @@ module.exports = {
 async function sendDashboard(interaction, settings) {
     const isUpdate = interaction.isStringSelectMenu() || interaction.isChannelSelectMenu();
     
-    // 1. Build the Container
-    const container = new ContainerBuilder()
-        .setAccentColor(0x5865F2); // Blurple
+    // Container
+    const container = new ContainerBuilder().setAccentColor(0x5865F2);
 
-    // Header
     container.addSectionComponents(new SectionBuilder()
         .addTextDisplayComponents(t => t.setContent('# 🛡️ AutoMod Dashboard'))
         .addTextDisplayComponents(t => t.setContent('Use the menu below to toggle modules on or off.'))
     );
-
     container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
 
     // Status Section
     const statusSection = new SectionBuilder();
-    
-    // Helper to format status text
     const getStatus = (isEnabled) => isEnabled ? '✅ **Active**' : '🔴 **Disabled**';
 
     statusSection.addTextDisplayComponents(t => t.setContent(`### 🔗 Anti-Invite\n${getStatus(settings.antiInvite)}`));
@@ -82,10 +78,9 @@ async function sendDashboard(interaction, settings) {
     
     const logChannelName = settings.logChannelId ? `<#${settings.logChannelId}>` : 'Not Set';
     statusSection.addTextDisplayComponents(t => t.setContent(`### 📝 Log Channel\n${logChannelName}`));
-
     container.addSectionComponents(statusSection);
 
-    // 2. Build Interactive Menus (Select Menu)
+    // Menus
     const toggleMenu = new StringSelectMenuBuilder()
         .setCustomId('setup_toggle')
         .setPlaceholder('Toggle a Module...')
@@ -103,7 +98,6 @@ async function sendDashboard(interaction, settings) {
     const row1 = new ActionRowBuilder().addComponents(toggleMenu);
     const row2 = new ActionRowBuilder().addComponents(channelMenu);
 
-    // 3. Send/Update Message
     const payload = {
         content: '',
         components: [container, row1, row2],
