@@ -7,7 +7,7 @@ const {
     MessageFlags,
     ContainerBuilder,
     ButtonStyle,
-    ButtonBuilder, // <--- 👈 I ADDED THIS (It was missing)
+    ButtonBuilder,
     ActionRowBuilder
 } = require('discord.js');
 
@@ -27,7 +27,13 @@ module.exports = {
             settings = await GuildSettings.create({ guildId });
         }
 
-        // 2. Send Dashboard
+        // 2. CHECK: Is this a Button/Menu update?
+        // If it's a button, we SKIP the subcommand check and just render the dashboard
+        if (interaction.isMessageComponent()) {
+            return await sendDashboard(interaction, settings);
+        }
+
+        // 3. Otherwise, it is a Slash Command (/setup), so we start fresh
         // We use ephemeral so only the admin sees it
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await sendDashboard(interaction, settings);
@@ -36,6 +42,7 @@ module.exports = {
 
 // --- HELPER: RENDER DASHBOARD ---
 async function sendDashboard(interaction, settings) {
+    // Check if we are updating an existing message or sending a new one
     const isUpdate = interaction.isMessageComponent(); 
     
     const getStatus = (isEnabled) => isEnabled ? '✅ **Active**' : '🔴 **Disabled**';
@@ -59,7 +66,6 @@ async function sendDashboard(interaction, settings) {
                         `**Log Channel:** ${logChannelName}`
                     )
                 )
-                // REFRESH BUTTON
                 .setButtonAccessory((btn) => 
                     btn.setCustomId('setup_refresh')
                        .setLabel('Refresh')
@@ -74,9 +80,9 @@ async function sendDashboard(interaction, settings) {
                     .setCustomId('setup_toggle')
                     .setPlaceholder('🔻 Toggle Modules')
                     .addOptions(
-                        new StringSelectMenuOptionBuilder().setLabel('Anti-Invite').setValue('antiInvite').setEmoji('🔗'),
-                        new StringSelectMenuOptionBuilder().setLabel('Anti-Mention').setValue('antiMention').setEmoji('📢'),
-                        new StringSelectMenuOptionBuilder().setLabel('Bad Words').setValue('antiBadWords').setEmoji('🤬')
+                        new StringSelectMenuOptionBuilder().setLabel('Anti-Invite').setValue('antiInvite').setEmoji('🔗').setDescription('Block Discord Invite Links'),
+                        new StringSelectMenuOptionBuilder().setLabel('Anti-Mention').setValue('antiMention').setEmoji('📢').setDescription('Block @everyone pings'),
+                        new StringSelectMenuOptionBuilder().setLabel('Bad Words').setValue('antiBadWords').setEmoji('🤬').setDescription('Block profanity')
                     )
             )
         )
@@ -110,7 +116,12 @@ async function sendDashboard(interaction, settings) {
     };
 
     if (isUpdate) {
-        await interaction.update(payload);
+        // If the interaction has already been deferred/replied (like with modals), use editReply
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(payload);
+        } else {
+            await interaction.update(payload);
+        }
     } else {
         await interaction.editReply(payload);
     }
