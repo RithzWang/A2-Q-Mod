@@ -2,8 +2,12 @@ const {
     Client, 
     GatewayIntentBits, 
     PermissionsBitField, 
-    EmbedBuilder, 
-    Partials 
+    Partials,
+    // V2 Imports
+    ContainerBuilder,
+    SectionBuilder,
+    TextDisplayBuilder,
+    MessageFlags
 } = require('discord.js');
 
 const config = require('./config.json');
@@ -13,7 +17,7 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // CRITICAL: Needed to read messages
+        GatewayIntentBits.MessageContent, // CRITICAL
         GatewayIntentBits.GuildMembers
     ],
     partials: [Partials.Message, Partials.Channel]
@@ -30,8 +34,7 @@ client.on('messageCreate', async (message) => {
     // 1. Ignore bots and DMs
     if (message.author.bot || !message.guild) return;
 
-    // 2. IGNORE ADMINS (Admins/Staff can do anything)
-    // We check for Administrator permission OR "Manage Messages"
+    // 2. IGNORE ADMINS/STAFF
     if (message.member.permissions.has(PermissionsBitField.Flags.Administrator) || 
         message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
         return;
@@ -40,16 +43,17 @@ client.on('messageCreate', async (message) => {
     const content = message.content.toLowerCase();
     let violation = null;
     let userWarning = "";
+    let color = 0x888888; // Default Gray
 
     // ============================================
     // CHECK A: ANTI-MENTION (@everyone / @here)
     // ============================================
     const mentionRegex = /@(everyone|here)/;
     if (mentionRegex.test(message.content)) {
-        // Check if they specifically lack the permission to ping everyone
         if (!message.member.permissions.has(PermissionsBitField.Flags.MentionEveryone)) {
             violation = "Illegal Mention";
             userWarning = config.messages.mention;
+            color = 0xED4245; // 🔴 Red
         }
     }
 
@@ -60,16 +64,18 @@ client.on('messageCreate', async (message) => {
     if (!violation && inviteRegex.test(message.content)) {
         violation = "Server Invite";
         userWarning = config.messages.invite;
+        color = 0xFEE75C; // 🟠 Orange/Yellow
     }
 
     // ============================================
     // CHECK C: BAD WORDS
     // ============================================
     if (!violation && config.badWords.length > 0) {
-        const foundBadWord = config.badWords.some(word => content.includes(word.toLowerCase()));
+        const foundBadWord = config.badWords.some(word => content.includes(word));
         if (foundBadWord) {
             violation = "Profanity";
             userWarning = config.messages.badword;
+            color = 0x5865F2; // 🔵 Blue
         }
     }
 
@@ -78,41 +84,48 @@ client.on('messageCreate', async (message) => {
     // ============================================
     if (violation) {
         try {
-            // 1. Save content for the log
             const originalContent = message.content;
             const author = message.author;
             const channel = message.channel;
 
-            // 2. Delete the bad message
+            // 1. Delete the bad message
             if (message.deletable) {
                 await message.delete();
             }
 
-            // 3. Send Temporary Warning to Chat
+            // 2. Send Temporary Warning to Chat
             const warningMsg = await channel.send(`${author} ${userWarning}`);
             setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
 
-            // 4. Send LOG to Staff Channel
+            // 3. Send CONTAINER Log to Staff Channel
             const logChannel = client.channels.cache.get(config.logChannelId);
             if (logChannel) {
-                // Determine Color based on severity
-                let color = 0xFEE75C; // Yellow (Default)
-                if (violation === "Server Invite") color = 0xE67E22; // Orange
-                if (violation === "Illegal Mention") color = 0xED4245; // Red
+                
+                const container = new ContainerBuilder()
+                    .setAccentColor(color);
 
-                const embed = new EmbedBuilder()
-                    .setTitle(`🛡️ AutoMod: ${violation}`)
-                    .setColor(color)
-                    .setThumbnail(author.displayAvatarURL())
-                    .addFields(
-                        { name: 'User', value: `${author} (\`${author.id}\`)`, inline: true },
-                        { name: 'Channel', value: `${channel}`, inline: true },
-                        { name: 'Content', value: `\`\`\`${originalContent}\`\`\`` }
+                // Create Section with Info and Avatar
+                const section = new SectionBuilder()
+                    .addTextDisplayComponents((text) => 
+                        text.setContent(`### 🛡️ AutoMod: ${violation}`)
                     )
-                    .setFooter({ text: 'Action: Message Deleted' })
-                    .setTimestamp();
+                    .addTextDisplayComponents((text) => 
+                        text.setContent(
+                            `**User:** ${author} (\`${author.id}\`)\n` +
+                            `**Channel:** ${channel}\n` +
+                            `**Content:** \`${originalContent}\``
+                        )
+                    )
+                    .setThumbnailAccessory((thumb) =>
+                        thumb.setURL(author.displayAvatarURL())
+                    );
 
-                await logChannel.send({ embeds: [embed] });
+                container.addSectionComponents(section);
+
+                await logChannel.send({ 
+                    components: [container],
+                    flags: MessageFlags.IsComponentsV2 
+                });
             }
 
         } catch (error) {
