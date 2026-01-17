@@ -40,7 +40,7 @@ for (const file of eventFiles) {
 // --- 3. CONNECT TO DATABASE & START ---
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
 
     // Connect to MongoDB
