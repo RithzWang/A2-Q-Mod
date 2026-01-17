@@ -1,6 +1,6 @@
 {
-    "logChannelId": "YOUR_LOG_CHANNEL_ID",
-    "badWords": ["badword1", "swearword2", "dontsaythis"],
+    "logChannelId": "1456197056988319869",
+    "badWords": ["fuck", "nigga", "shit"],
     "messages": {
         "invite": "⛔ **Server invites are not allowed!**",
         "mention": "⛔ **Do not ping everyone!**",
