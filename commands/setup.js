@@ -6,7 +6,9 @@ const {
     ChannelType,
     MessageFlags,
     ContainerBuilder,
-    ButtonStyle
+    ButtonStyle,
+    ButtonBuilder, // <--- 👈 I ADDED THIS (It was missing)
+    ActionRowBuilder
 } = require('discord.js');
 
 const GuildSettings = require('../schemas/GuildSettings');
@@ -21,9 +23,12 @@ module.exports = {
         
         // 1. Fetch/Create Settings
         let settings = await GuildSettings.findOne({ guildId });
-        if (!settings) settings = await GuildSettings.create({ guildId });
+        if (!settings) {
+            settings = await GuildSettings.create({ guildId });
+        }
 
         // 2. Send Dashboard
+        // We use ephemeral so only the admin sees it
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await sendDashboard(interaction, settings);
     }
@@ -31,7 +36,7 @@ module.exports = {
 
 // --- HELPER: RENDER DASHBOARD ---
 async function sendDashboard(interaction, settings) {
-    const isUpdate = interaction.isMessageComponent(); // Checks if it's a button/menu update
+    const isUpdate = interaction.isMessageComponent(); 
     
     const getStatus = (isEnabled) => isEnabled ? '✅ **Active**' : '🔴 **Disabled**';
     const logChannelName = settings.logChannelId ? `<#${settings.logChannelId}>` : 'Not Set';
@@ -84,11 +89,10 @@ async function sendDashboard(interaction, settings) {
                     .setChannelTypes(ChannelType.GuildText)
             )
         )
-        // ADD BAD WORD BUTTON (New!)
+        // ADD BAD WORD BUTTONS
         .addActionRowComponents((row) => 
-           // We use a Button here because it triggers a Modal (Pop-up)
             row.addComponents(
-                new ButtonBuilder() // You need to import ButtonBuilder at the top!
+                new ButtonBuilder()
                     .setCustomId('setup_addword_btn')
                     .setLabel('➕ Add Bad Word')
                     .setStyle(ButtonStyle.Primary),
