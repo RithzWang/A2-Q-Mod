@@ -10,6 +10,7 @@ const {
     MessageFlags
 } = require('discord.js');
 
+const keep_alive = require('./keep_alive.js');
 const config = require('./config.json');
 
 // --- CLIENT SETUP ---
