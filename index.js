@@ -37,7 +37,7 @@ client.once('clientReady', () => {
         }],
         status: 'dnd'
     });
-});
+})
 
 });
 
