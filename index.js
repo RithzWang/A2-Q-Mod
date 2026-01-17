@@ -38,7 +38,6 @@ client.once('clientReady', () => {
         status: 'dnd'
     });
 
-}); // Updates every 1 minute
 });
 
 // --- AUTOMOD LOGIC ---
