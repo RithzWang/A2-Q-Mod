@@ -1,106 +1,107 @@
 const { 
     SlashCommandBuilder, 
-    ActionRowBuilder, 
     StringSelectMenuBuilder, 
     StringSelectMenuOptionBuilder,
     ChannelSelectMenuBuilder,
     ChannelType,
     MessageFlags,
     ContainerBuilder,
-    SectionBuilder,
-    TextDisplayBuilder,
-    SeparatorBuilder,
-    SeparatorSpacingSize
+    ButtonStyle
 } = require('discord.js');
 
-const GuildSettings = require('../schemas/GuildSettings'); // <--- Import Schema
+const GuildSettings = require('../schemas/GuildSettings');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setup')
-        .setDescription('Configure the AutoMod system')
-        .addSubcommand(sub => sub.setName('dashboard').setDescription('View and edit AutoMod settings'))
-        .addSubcommand(sub => 
-            sub.setName('badword').setDescription('Add a word to the blocklist')
-            .addStringOption(opt => opt.setName('word').setDescription('Word to block').setRequired(true))
-        ),
+        .setDescription('Open the Advanced AutoMod Dashboard'),
 
     async execute(interaction) {
         const guildId = interaction.guild.id;
         
-        // 1. Fetch or Create Settings (Async)
+        // 1. Fetch/Create Settings
         let settings = await GuildSettings.findOne({ guildId });
-        if (!settings) {
-            settings = await GuildSettings.create({ guildId });
-        }
+        if (!settings) settings = await GuildSettings.create({ guildId });
 
-        const subcommand = interaction.options.getSubcommand();
-
-        // --- SUBCOMMAND: ADD BAD WORD ---
-        if (subcommand === 'badword') {
-            const word = interaction.options.getString('word').toLowerCase();
-            if (!settings.badWordsList.includes(word)) {
-                settings.badWordsList.push(word);
-                await settings.save(); // <--- Must Save
-                return interaction.reply({ content: `✅ Added **${word}** to the blocklist.`, flags: MessageFlags.Ephemeral });
-            }
-            return interaction.reply({ content: `⚠️ **${word}** is already blocked.`, flags: MessageFlags.Ephemeral });
-        }
-
-        // --- SUBCOMMAND: DASHBOARD ---
-        if (subcommand === 'dashboard') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-            await sendDashboard(interaction, settings);
-        }
+        // 2. Send Dashboard
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        await sendDashboard(interaction, settings);
     }
 };
 
 // --- HELPER: RENDER DASHBOARD ---
 async function sendDashboard(interaction, settings) {
-    const isUpdate = interaction.isStringSelectMenu() || interaction.isChannelSelectMenu();
+    const isUpdate = interaction.isMessageComponent(); // Checks if it's a button/menu update
     
-    // Container
-    const container = new ContainerBuilder().setAccentColor(0x5865F2);
-
-    container.addSectionComponents(new SectionBuilder()
-        .addTextDisplayComponents(t => t.setContent('# 🛡️ AutoMod Dashboard'))
-        .addTextDisplayComponents(t => t.setContent('Use the menu below to toggle modules on or off.'))
-    );
-    container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
-
-    // Status Section
-    const statusSection = new SectionBuilder();
     const getStatus = (isEnabled) => isEnabled ? '✅ **Active**' : '🔴 **Disabled**';
-
-    statusSection.addTextDisplayComponents(t => t.setContent(`### 🔗 Anti-Invite\n${getStatus(settings.antiInvite)}`));
-    statusSection.addTextDisplayComponents(t => t.setContent(`### 📢 Anti-Mention\n${getStatus(settings.antiMention)}`));
-    statusSection.addTextDisplayComponents(t => t.setContent(`### 🤬 Anti-BadWords\n${getStatus(settings.antiBadWords)}`));
-    
     const logChannelName = settings.logChannelId ? `<#${settings.logChannelId}>` : 'Not Set';
-    statusSection.addTextDisplayComponents(t => t.setContent(`### 📝 Log Channel\n${logChannelName}`));
-    container.addSectionComponents(statusSection);
+    const wordCount = settings.badWordsList.length;
 
-    // Menus
-    const toggleMenu = new StringSelectMenuBuilder()
-        .setCustomId('setup_toggle')
-        .setPlaceholder('Toggle a Module...')
-        .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Toggle Anti-Invite').setValue('antiInvite').setEmoji('🔗'),
-            new StringSelectMenuOptionBuilder().setLabel('Toggle Anti-Mention').setValue('antiMention').setEmoji('📢'),
-            new StringSelectMenuOptionBuilder().setLabel('Toggle Bad Words').setValue('antiBadWords').setEmoji('🤬')
+    const container = new ContainerBuilder()
+        .setAccentColor(0x5865F2)
+        .addTextDisplayComponents((text) =>
+            text.setContent('# 🛡️ AutoMod Dashboard')
+        )
+        // Status Section
+        .addSectionComponents((section) => 
+            section
+                .addTextDisplayComponents((text) =>
+                    text.setContent(
+                        `### Current Status\n` +
+                        `**Anti-Invite:** ${getStatus(settings.antiInvite)}\n` +
+                        `**Anti-Mention:** ${getStatus(settings.antiMention)}\n` +
+                        `**Bad Words:** ${getStatus(settings.antiBadWords)} (${wordCount} words)\n` +
+                        `**Log Channel:** ${logChannelName}`
+                    )
+                )
+                // REFRESH BUTTON
+                .setButtonAccessory((btn) => 
+                    btn.setCustomId('setup_refresh')
+                       .setLabel('Refresh')
+                       .setStyle(ButtonStyle.Secondary)
+                )
+        )
+        .addSeparatorComponents((sep) => sep)
+        // TOGGLE MENU
+        .addActionRowComponents((row) => 
+            row.setComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('setup_toggle')
+                    .setPlaceholder('🔻 Toggle Modules')
+                    .addOptions(
+                        new StringSelectMenuOptionBuilder().setLabel('Anti-Invite').setValue('antiInvite').setEmoji('🔗'),
+                        new StringSelectMenuOptionBuilder().setLabel('Anti-Mention').setValue('antiMention').setEmoji('📢'),
+                        new StringSelectMenuOptionBuilder().setLabel('Bad Words').setValue('antiBadWords').setEmoji('🤬')
+                    )
+            )
+        )
+        // CHANNEL MENU
+        .addActionRowComponents((row) => 
+            row.setComponents(
+                new ChannelSelectMenuBuilder()
+                    .setCustomId('setup_channel')
+                    .setPlaceholder('📝 Select Log Channel')
+                    .setChannelTypes(ChannelType.GuildText)
+            )
+        )
+        // ADD BAD WORD BUTTON (New!)
+        .addActionRowComponents((row) => 
+           // We use a Button here because it triggers a Modal (Pop-up)
+            row.addComponents(
+                new ButtonBuilder() // You need to import ButtonBuilder at the top!
+                    .setCustomId('setup_addword_btn')
+                    .setLabel('➕ Add Bad Word')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('setup_clearwords_btn')
+                    .setLabel('🗑️ Clear All Words')
+                    .setStyle(ButtonStyle.Danger)
+            )
         );
-
-    const channelMenu = new ChannelSelectMenuBuilder()
-        .setCustomId('setup_channel')
-        .setPlaceholder('Select Log Channel...')
-        .setChannelTypes(ChannelType.GuildText);
-
-    const row1 = new ActionRowBuilder().addComponents(toggleMenu);
-    const row2 = new ActionRowBuilder().addComponents(channelMenu);
 
     const payload = {
         content: '',
-        components: [container, row1, row2],
+        components: [container],
         flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
     };
 
